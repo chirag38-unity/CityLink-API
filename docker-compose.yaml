@@ -1,0 +1,8 @@
+version : "3"
+services :
+  citylink-api :
+    container_name :  citylink-api
+    build : 
+      dockerfile : Dockerfile
+    ports:
+      - 3000:3000

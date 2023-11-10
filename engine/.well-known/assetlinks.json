@@ -1,0 +1,13 @@
+[
+	{
+		"relation": ["delegate_permission/common.handle_all_urls"],
+		"target": {
+			"namespace": "android_app",
+			"package_name": "com.example.citylink",
+			"sha256_cert_fingerprints": [
+				"B9:CC:85:BB:5E:DB:5B:0E:04:95:C7:F1:89:8A:D6:CB:55:BC:1E:29:8C:22:CD:8B:5C:B8:99:8A:FC:B3:FC:1F",
+				"F9:A6:BF:B0:26:CD:83:E0:01:17:A3:45:57:3A:8E:94:75:EE:CC:8A:78:32:13:D5:79:7A:C3:F1:CD:BB:CF:30"
+			]
+		}
+	}
+]
