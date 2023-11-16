@@ -33,8 +33,7 @@ const busStopsRef = db.collection("BusStops")
 const busRoutesRef = db.collection("BusRoutes")
 const userRef = db.collection("Users");
 
-//Initialising Data------------------------------------------------------------------------------------------------------------------
-const busI123 = {							// Will Dynamically change
+const busI123 = {
 	id: 123,
 	passengers: 12,
 	latitude: 18.994449327500444,
@@ -50,21 +49,11 @@ const busI234 = {
 	lastLocation: "Khandeshwar",
 };
 
-// Express initialisations-------------------------------------------------------------------------------------------------------------
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.set("views",path.join(__dirname,"/views"));
 app.set("view engine", "ejs");
 app.use(express.static(path.join(__dirname, "/engine")));
-
-app.use(express.json());
-app.use(function (req, res, next) {
-	res.setHeader("Content-Type", "application/json");
-	next();
-});
-app.use(cors());
-app.use(helmet());
-
-// Open RESTful End Points --------------------------------------------------------------------------------------------------------- 
 
 app.get("/", (req, res) => {
 	res.render("index", { appname : "City Link - 1"});
@@ -74,13 +63,19 @@ app.get("/ride", (req, res) => {
 	res.render("downloads")
 })
 
+app.use(express.json());
+app.use(function (req, res, next) {
+	res.setHeader("Content-Type","application/json");
+	next();
+});
+app.use(cors());
+app.use(helmet());
 
 //Sockets creation------------------------------------------------------------------------------------------------------------------------------------------------
-
 const server = http.createServer(app);
 const io = new SocketServer(server);
 
-io.use((socket, next) => {							// Socket connection security
+io.use((socket, next) => {
 	const apiKey = socket.handshake.query.apiKey;
 	if (apiKey === process.env.applicationSecret) {
 		return next();
@@ -89,30 +84,36 @@ io.use((socket, next) => {							// Socket connection security
 	return next(new Error("Unauthorized"));
 });
 
-io.on('connect', (socket) => {						// Socket Connect
+io.on('connect', (socket) => {
 	const userId = socket.handshake.query.userId;
 	console.log(`User is connected -> ${userId}`)
 
 	function emitBusData() {
 		socket.emit('LiveBusData', busI123, busI234 );
 	}
-	const emittingBusData = setInterval(emitBusData, 5000); // Emit bus live locations
+	const emittingBusData = setInterval(emitBusData, 5000);
 
-	socket.on('serviceStart', (dataJson) => {				// Tracking user location - Onboarding Process
+	socket.on('serviceStart', (dataJson) => {
 		const data = JSON.parse(dataJson);
-		console.log(`User -> ${data.ID} boarded bus -> ${data.busID}`)
+		const busNumber = data.busID;
+		const passengersCount = data.passengersCount;
+		if (passengersCount > 1)
+			console.log(`User -> ${data.ID} with ${passengersCount - 1} boarded bus -> ${busNumber}`);
+		else
+			console.log(`User -> ${data.ID} boarded bus -> ${data.busID}`);
 	})
 
-	socket.on("locationUpdate", (dataJson) => {				// Tracking user location - Live Tracking
+	socket.on("locationUpdate", (dataJson) => {
 		const data = JSON.parse(dataJson);
-		console.log(
-			`Location updated data : ${data.ID} -> latitude ${data.latitude} longitude ${data.longitude}`,
-		);
+		console.log(`Location updated data : ${data.ID} -> latitude ${data.latitude} longitude ${data.longitude}`);
 	});
 
-	socket.on("serviceStop", (dataJson) => {				// Tracking user location - Deboarding Process
+	socket.on("serviceStop", (dataJson) => {
 		const data = JSON.parse(dataJson);
-		console.log(`User -> ${data.ID} deboarded bus -> ${data.busID}`);
+		if (passengersCount > 1)
+			console.log(`User -> ${data.ID} with ${passengersCount - 1} deboarded bus -> ${busNumber}`);
+		else
+			console.log(`User -> ${data.ID} boarded bus -> ${data.busID}`);
 	});
 
 	socket.on("disconnect", () => {
@@ -124,10 +125,12 @@ io.on('connect', (socket) => {						// Socket Connect
 
 //API-security--------------------------------------------------------------------------------------------------------
 app.use("/secure", (req, res, next) => { 
-	const apiKey = req.get("X-Api-Key"); 
-	if (apiKey === process.env.applicationSecret) {			// Correct API Key
+	const apiKey = req.get("X-Api-Key"); // Assuming the API key is in the header
+	if (apiKey === process.env.applicationSecret) {
+		// Valid API key; continue to the route
 		next();
 	} else {
+		// Invalid API key; return unauthorized response
 		res.status(401).json({ error: "Unauthorized" });
 	}
 })
@@ -275,6 +278,69 @@ app.post("/secure/addalert", async (req, res) => {
 			res.status(500).json({ result: "Error creating alert" });
 		});
 });
+
+// experimental routes ---------------------------------------------------------------------------------------------------------------------------
+app.post("/print", async (req, res) => {
+	const email = req.body.email;
+	const userName = req.body.name;
+	const wallet = req.body.wallet;
+
+	console.log(
+		`User pinged: userName = ${userName}, email = ${email}, wallet = ${wallet}`,
+	);
+	const codeToSend = {
+		result: 200,
+	};
+	res.status(200).send(JSON.stringify(codeToSend));
+});
+
+app.post("/deduct", async (req, res) => {
+	try {
+		const userID = req.body.userID;
+		const doc = await userRef.doc(userID).get();
+		const user = doc._fieldsProto;
+		const deduction = user.wallet.integerValue - 20;
+		await userRef
+			.doc(userID)
+			.update({
+				wallet: deduction,
+			})
+			.then(results => {
+				res.status(200).json({ deduction: deduction });
+			});
+	} catch (error) {
+		res.status(400).send(error.message);
+	}
+});
+
+app.post("/send-notification", async (req, res) => { 
+
+	var message = {
+		notification: {
+			title: req.body.alert_title,
+			body: req.body.alert_body,
+		},
+		data: {
+			title: "Title2",
+			body: "Body2",
+		},
+	};
+
+	roadblocks.push({ latitude: req.body.latitude, longitude: req.body.longitude });
+
+	admin.messaging().sendToTopic('alerts',message)
+		.then((response) => {
+			console.log("Notification sent:", response.data);
+			res.status(200).send("Alert Created successfully");
+		})
+		.catch((error) => {
+			console.error("Error sending notification:", error);
+			res.status(500).send("Error creating alert");
+		});
+
+});
+
+
 
 // const PORT = process.env.PORT || 3000;
 server.listen(process.env.PORT || 3000, () => {
